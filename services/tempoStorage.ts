@@ -40,6 +40,10 @@ export function loadTempoState(): TempoState {
           ? {
               ...parsed.activeSession,
               targetMinutes: clampMinutes(parsed.activeSession.targetMinutes),
+              alertedAt: parsed.activeSession.alertedAt ?? null,
+              lastReminderAt: parsed.activeSession.lastReminderAt ?? null,
+              reminderStage: parsed.activeSession.reminderStage ?? -1,
+              reminderAcknowledgedAt: parsed.activeSession.reminderAcknowledgedAt ?? null,
             }
           : null,
     };
@@ -162,6 +166,10 @@ export function importJsonBackup(file: File): Promise<TempoState> {
               ? {
                   ...parsed.activeSession,
                   targetMinutes: clampMinutes(parsed.activeSession.targetMinutes),
+                  alertedAt: parsed.activeSession.alertedAt ?? null,
+                  lastReminderAt: parsed.activeSession.lastReminderAt ?? null,
+                  reminderStage: parsed.activeSession.reminderStage ?? -1,
+                  reminderAcknowledgedAt: parsed.activeSession.reminderAcknowledgedAt ?? null,
                 }
               : null,
         });

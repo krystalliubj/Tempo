@@ -110,6 +110,37 @@ export function formatClock(totalSeconds: number): string {
   ].join(':');
 }
 
+export function formatCountdownClock(targetMinutes: number, elapsedSec: number): string {
+  const targetSeconds = Math.max(0, Math.round(targetMinutes * 60));
+  const diffSeconds = targetSeconds - Math.max(0, Math.floor(elapsedSec));
+
+  if (diffSeconds >= 0) {
+    return formatClock(diffSeconds);
+  }
+
+  return `+${formatClock(Math.abs(diffSeconds))}`;
+}
+
+export function getCountdownMeta(targetMinutes: number, elapsedSec: number): {
+  timerText: string;
+  timerLabel: string;
+} {
+  const targetSeconds = Math.max(0, Math.round(targetMinutes * 60));
+  const safeElapsed = Math.max(0, Math.floor(elapsedSec));
+
+  if (safeElapsed > targetSeconds) {
+    return {
+      timerText: `+${formatClock(safeElapsed - targetSeconds)}`,
+      timerLabel: '已超时（时:分:秒）',
+    };
+  }
+
+  return {
+    timerText: formatClock(targetSeconds - safeElapsed),
+    timerLabel: '剩余时间（时:分:秒）',
+  };
+}
+
 export function formatDurationCompact(totalSeconds: number): string {
   const seconds = Math.max(0, Math.round(totalSeconds));
   const hours = Math.floor(seconds / 3600);

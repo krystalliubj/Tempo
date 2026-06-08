@@ -2,14 +2,14 @@ import React from 'react';
 
 interface ReminderBannerProps {
   projectName: string;
-  elapsed: string;
+  overtime: string;
   onStop: () => void;
   onContinue: () => void;
 }
 
 const ReminderBanner: React.FC<ReminderBannerProps> = ({
   projectName,
-  elapsed,
+  overtime,
   onStop,
   onContinue,
 }) => {
@@ -17,8 +17,7 @@ const ReminderBanner: React.FC<ReminderBannerProps> = ({
     <section className="banner show">
       <div>
         <p>
-          <strong>{projectName}</strong> 已到设定时长，当前已累计 <strong>{elapsed}</strong>。
-          你可以手动停止，也可以继续计时后再切换到下一个项目。
+          <strong>{projectName}</strong> 已到设定时长，当前已超时 <strong>{overtime}</strong>。
         </p>
       </div>
       <div className="banner-actions">

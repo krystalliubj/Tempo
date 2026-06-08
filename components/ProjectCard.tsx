@@ -5,6 +5,7 @@ interface ProjectCardProps {
   project: TimerProject;
   isActive: boolean;
   timerText: string;
+  timerLabel: string;
   todayDuration: string;
   weekDuration: string;
   interruptionCount: number;
@@ -20,6 +21,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   project,
   isActive,
   timerText,
+  timerLabel,
   todayDuration,
   weekDuration,
   interruptionCount,
@@ -31,8 +33,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   onDelete,
 }) => {
   const buttonLabel = !hasRunningSession ? '开始计时' : isActive ? '停止计时' : '切换到此项目';
-  const timerLabel = isActive ? '实时计时（时:分:秒）' : '今日累计（时:分:秒）';
-  const parts = timerText.split(':');
+  const hasOvertimePrefix = timerText.startsWith('+');
+  const rawTimerText = hasOvertimePrefix ? timerText.slice(1) : timerText;
+  const parts = rawTimerText.split(':');
 
   return (
     <article className={`project-card${isActive ? ' active' : ''}`}>
@@ -55,6 +58,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       <div className="timer-value" aria-label={timerText}>
         {parts.length === 3 ? (
           <>
+            {hasOvertimePrefix && <span className="timer-sign">+</span>}
             <span className="timer-group">{parts[0]}</span>
             <span className="timer-separator">:</span>
             <span className="timer-group">{parts[1]}</span>

@@ -22,11 +22,13 @@ import {
   createId,
   createSessionFromActive,
   formatClock,
+  formatCountdownClock,
   formatDateKey,
   formatDurationCompact,
   getActiveElapsedSec,
   getCategoryDuration,
   getCompletedSessionsForProject,
+  getCountdownMeta,
   getInterruptedCountByDate,
   getInterruptedCountForProject,
   getLastNDays,
@@ -36,6 +38,9 @@ import {
   getTotalDurationByDate,
   normalizeColor,
 } from './utils/tempo';
+
+const REMINDER_STAGE_DELAYS_SEC = [0, 60, 180, 300, 600] as const;
+const REMINDER_STAGE_LABELS = ['到点', '1 分钟', '3 分钟', '5 分钟', '10 分钟'] as const;
 
 const App: React.FC = () => {
   const [state, setState] = useState<TempoState>(() => loadTempoState());
@@ -59,6 +64,7 @@ const App: React.FC = () => {
   const [showCustomEditColor, setShowCustomEditColor] = useState(false);
 
   const toastTimerRef = useRef<number | null>(null);
+  const reminderAudioRef = useRef<HTMLAudioElement | null>(null);
   const miniWindowRef = useRef<Window | null>(null);
 
   const todayKey = formatDateKey(now);
@@ -67,6 +73,12 @@ const App: React.FC = () => {
     ? getProjectById(state.projects, state.activeSession.projectId)
     : null;
   const activeElapsedSec = getActiveElapsedSec(state.activeSession, now);
+  const activeCountdown = activeProject
+    ? getCountdownMeta(activeProject.targetMinutes, activeElapsedSec)
+    : null;
+  const activeOvertime = activeProject
+    ? formatClock(Math.max(0, activeElapsedSec - activeProject.targetMinutes * 60))
+    : '00:00:00';
 
   useEffect(() => {
     saveTempoState(state);
@@ -86,21 +98,45 @@ const App: React.FC = () => {
     }
 
     const targetSec = state.activeSession.targetMinutes * 60;
-    if (
-      targetSec > 0 &&
-      activeElapsedSec >= targetSec &&
-      !state.activeSession.alertedAt
-    ) {
-      triggerReminder();
+    if (targetSec <= 0) {
+      return;
     }
-  }, [activeElapsedSec, state.activeSession]);
+
+    const overdueSec = activeElapsedSec - targetSec;
+    if (overdueSec < 0) {
+      return;
+    }
+
+    let dueStage = -1;
+    REMINDER_STAGE_DELAYS_SEC.forEach((delaySec, index) => {
+      if (overdueSec >= delaySec) {
+        dueStage = index;
+      }
+    });
+
+    if (dueStage > state.activeSession.reminderStage) {
+      triggerReminder(dueStage);
+    }
+  }, [activeElapsedSec, activeProject?.name, state.activeSession]);
 
   useEffect(() => {
     syncMiniWindow();
   }, [activeElapsedSec, activeProject, state.activeSession]);
 
   useEffect(() => {
+    const audio = new Audio('/sounds/universfield-new-notification-036-485897.mp3');
+    audio.preload = 'auto';
+    reminderAudioRef.current = audio;
+
     return () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      if (reminderAudioRef.current) {
+        reminderAudioRef.current.pause();
+        reminderAudioRef.current.src = '';
+        reminderAudioRef.current = null;
+      }
       closeMiniWindow();
     };
   }, []);
@@ -118,9 +154,11 @@ const App: React.FC = () => {
         note: activeProject ? activeProject.name : '当前没有运行中的项目',
       },
       {
-        label: '实时计时',
-        value: state.activeSession ? formatClock(activeElapsedSec) : '--:--:--',
-        note: activeProject ? `目标 ${activeProject.targetMinutes} 分钟` : '可以从任意项目开始',
+        label: '当前计时',
+        value: state.activeSession && activeCountdown ? activeCountdown.timerText : '--:--:--',
+        note: state.activeSession && activeCountdown
+          ? `${activeCountdown.timerLabel} · 目标 ${activeProject?.targetMinutes || 0} 分钟`
+          : '可以从任意项目开始',
       },
       {
         label: '今日累计',
@@ -143,7 +181,7 @@ const App: React.FC = () => {
         note: '最近 7 天',
       },
     ];
-  }, [activeElapsedSec, activeProject, last7Days, now, state, todayKey]);
+  }, [activeCountdown, activeElapsedSec, activeProject, last7Days, now, state, todayKey]);
 
   const sortedProjects = useMemo(() => {
     return [...state.projects].sort((a, b) => {
@@ -163,9 +201,10 @@ const App: React.FC = () => {
     ? getProjectById(state.projects, editingProjectId)
     : null;
 
-  function triggerReminder() {
+  function triggerReminder(stage: number) {
+    const triggeredAt = Date.now();
     setState((current) => {
-      if (!current.activeSession || current.activeSession.alertedAt) {
+      if (!current.activeSession || stage <= current.activeSession.reminderStage) {
         return current;
       }
 
@@ -173,20 +212,21 @@ const App: React.FC = () => {
         ...current,
         activeSession: {
           ...current.activeSession,
-          alertedAt: Date.now(),
-          reminderAcknowledgedAt: null,
+          alertedAt: current.activeSession.alertedAt ?? triggeredAt,
+          lastReminderAt: triggeredAt,
+          reminderStage: stage,
         },
       };
     });
 
     const name = activeProject?.name || '当前项目';
-    showToast(`${name} 已到设定时间，请手动停止或切换到下一个项目。`);
+    showToast(getReminderToast(name, stage));
     playReminder();
 
     if ('Notification' in window) {
       if (Notification.permission === 'granted') {
         void new Notification('Tempo 计时到点', {
-          body: `${name} 已达到 ${activeProject?.targetMinutes || 0} 分钟。`,
+          body: getReminderToast(name, stage),
         });
       } else if (Notification.permission === 'default') {
         void Notification.requestPermission();
@@ -194,7 +234,32 @@ const App: React.FC = () => {
     }
   }
 
+  function getReminderToast(projectName: string, stage: number) {
+    if (stage === 0) {
+      return `${projectName} 已到设定时间，请停止当前计时或继续专注。`;
+    }
+
+    const stageLabel = REMINDER_STAGE_LABELS[stage] || `${stage} 阶段`;
+    return `${projectName} 已超时 ${stageLabel}，请确认是否继续当前计时。`;
+  }
+
   function playReminder() {
+    const audio = reminderAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = 0.92;
+      void audio.play().catch((error) => {
+        console.warn('Reminder audio file not available, using fallback tone:', error);
+        playReminderFallback();
+      });
+      return;
+    }
+
+    playReminderFallback();
+  }
+
+  function playReminderFallback() {
     try {
       const AudioContextClass = window.AudioContext || (window as typeof window & {
         webkitAudioContext?: typeof AudioContext;
@@ -205,17 +270,37 @@ const App: React.FC = () => {
       }
 
       const context = new AudioContextClass();
-      const oscillator = context.createOscillator();
-      const gainNode = context.createGain();
-      oscillator.connect(gainNode);
-      gainNode.connect(context.destination);
-      oscillator.type = 'triangle';
-      oscillator.frequency.value = 880;
-      gainNode.gain.value = 0.0001;
-      oscillator.start();
-      gainNode.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.03);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.7);
-      oscillator.stop(context.currentTime + 0.75);
+      const pattern = [
+        { delay: 0, duration: 0.22, frequency: 880, peak: 0.15 },
+        { delay: 0.4, duration: 0.22, frequency: 880, peak: 0.14 },
+        { delay: 0.8, duration: 0.26, frequency: 932, peak: 0.15 },
+      ];
+
+      pattern.forEach(({ delay, duration, frequency, peak }) => {
+        const oscillator = context.createOscillator();
+        const gainNode = context.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(context.destination);
+        oscillator.type = 'triangle';
+        oscillator.frequency.value = frequency;
+        gainNode.gain.value = 0.0001;
+        oscillator.start(context.currentTime + delay);
+        gainNode.gain.exponentialRampToValueAtTime(
+          peak,
+          context.currentTime + delay + 0.03,
+        );
+        gainNode.gain.exponentialRampToValueAtTime(
+          0.0001,
+          context.currentTime + delay + duration,
+        );
+        oscillator.stop(context.currentTime + delay + duration + 0.04);
+      });
+
+      const totalDuration =
+        pattern[pattern.length - 1].delay + pattern[pattern.length - 1].duration + 0.12;
+      window.setTimeout(() => {
+        void context.close().catch(() => undefined);
+      }, totalDuration * 1000);
     } catch (error) {
       console.warn('Reminder audio not available:', error);
     }
@@ -308,6 +393,8 @@ const App: React.FC = () => {
           startAt: Date.now(),
           targetMinutes: project.targetMinutes,
           alertedAt: null,
+          lastReminderAt: null,
+          reminderStage: -1,
           reminderAcknowledgedAt: null,
         },
       };
@@ -481,7 +568,10 @@ const App: React.FC = () => {
       return;
     }
 
-    const timerText = state.activeSession ? formatClock(activeElapsedSec) : '--:--:--';
+    const timerText =
+      state.activeSession && activeProject
+        ? formatCountdownClock(activeProject.targetMinutes, activeElapsedSec)
+        : '--:--:--';
     const projectName = activeProject?.name || '当前空闲';
     const statusText = state.activeSession ? activeProject?.category || '专注' : '等待开始';
     const projectNameHtml = escapeMiniHtml(projectName);
@@ -664,7 +754,7 @@ const App: React.FC = () => {
 
             <p className="hint">所有项目会同时显示在右侧；任意时刻最多只有一个项目处于计时中。</p>
             <div className="mini-window-note">
-              迷你计时窗适合作为桌面小看板的前端原型，它只显示当前项目与实时计时。
+              迷你计时窗适合作为桌面小看板的前端原型，它只显示当前项目与倒计时。
             </div>
           </section>
 
@@ -690,10 +780,12 @@ const App: React.FC = () => {
         </aside>
 
         <main className="stack">
-          {state.activeSession?.alertedAt && !state.activeSession.reminderAcknowledgedAt && (
+          {state.activeSession?.lastReminderAt &&
+            (!state.activeSession.reminderAcknowledgedAt ||
+              state.activeSession.reminderAcknowledgedAt < state.activeSession.lastReminderAt) && (
             <ReminderBanner
               projectName={activeProject?.name || '当前项目'}
-              elapsed={formatClock(activeElapsedSec)}
+              overtime={activeOvertime}
               onStop={() => stopActiveSession('manual')}
               onContinue={acknowledgeReminder}
             />
@@ -703,7 +795,7 @@ const App: React.FC = () => {
             <span className="eyebrow">Project Timers</span>
             <div className="section-title">
               <h2>全部项目</h2>
-              <span className="subtle">最多 1 个项目同时计时，也允许全部空闲</span>
+              <span className="subtle">单项目计时模式，每次只专注一件事，也允许全部空闲</span>
             </div>
 
             {sortedProjects.length === 0 ? (
@@ -722,7 +814,16 @@ const App: React.FC = () => {
                       key={project.id}
                       project={project}
                       isActive={Boolean(isActive)}
-                      timerText={formatClock(isActive ? activeElapsedSec : todayDuration)}
+                      timerText={
+                        isActive
+                          ? formatCountdownClock(project.targetMinutes, activeElapsedSec)
+                          : formatClock(todayDuration)
+                      }
+                      timerLabel={
+                        isActive
+                          ? getCountdownMeta(project.targetMinutes, activeElapsedSec).timerLabel
+                          : '今日累计（时:分:秒）'
+                      }
                       todayDuration={formatDurationCompact(todayDuration)}
                       weekDuration={formatDurationCompact(weekDuration)}
                       interruptionCount={interruptedCount}

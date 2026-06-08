@@ -32,6 +32,8 @@ export interface ActiveSession {
   startAt: number;
   targetMinutes: number;
   alertedAt: number | null;
+  lastReminderAt: number | null;
+  reminderStage: number;
   reminderAcknowledgedAt: number | null;
 }
 

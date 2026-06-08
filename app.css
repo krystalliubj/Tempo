@@ -440,6 +440,15 @@ button {
   justify-content: center;
 }
 
+.timer-sign {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.7ch;
+  font-size: 0.78em;
+  line-height: 1;
+}
+
 .timer-separator {
   display: inline-flex;
   align-items: center;
@@ -526,6 +535,13 @@ button {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.banner-actions .btn {
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 10px;
+  font-size: 11px;
 }
 
 .chart-legend {
