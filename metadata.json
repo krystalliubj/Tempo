@@ -1,0 +1,5 @@
+{
+  "name": "Tempo",
+  "description": "A pure front-end multi-project timer for tracking real focus time, interruptions, exports, and a compact mini timer window.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,122 @@
+import React from 'react';
+import { TimerProject } from '../types';
+
+interface ProjectCardProps {
+  project: TimerProject;
+  isActive: boolean;
+  timerText: string;
+  todayDuration: string;
+  weekDuration: string;
+  interruptionCount: number;
+  completedCount: number;
+  hasRunningSession: boolean;
+  onEdit: (projectId: string) => void;
+  onStart: (projectId: string) => void;
+  onStop: () => void;
+  onDelete: (projectId: string) => void;
+}
+
+const ProjectCard: React.FC<ProjectCardProps> = ({
+  project,
+  isActive,
+  timerText,
+  todayDuration,
+  weekDuration,
+  interruptionCount,
+  completedCount,
+  hasRunningSession,
+  onEdit,
+  onStart,
+  onStop,
+  onDelete,
+}) => {
+  const buttonLabel = !hasRunningSession ? '开始计时' : isActive ? '停止计时' : '切换到此项目';
+  const timerLabel = isActive ? '实时计时（时:分:秒）' : '今日累计（时:分:秒）';
+  const parts = timerText.split(':');
+
+  return (
+    <article className={`project-card${isActive ? ' active' : ''}`}>
+      <div className="project-accent" style={{ background: project.color }} />
+      <div className="project-top">
+        <div>
+          <span className="badge">{project.category}</span>
+          <h3 className="project-name">{project.name}</h3>
+          <div className="project-meta">
+            <span>目标 {project.targetMinutes} 分钟</span>
+            <span>{project.targetMinutes} 分钟 / 单次目标</span>
+          </div>
+        </div>
+        <div className="status-chip project-status">
+          <span className={`status-dot${isActive ? ' live' : ''}`} />
+          {isActive ? '专注中' : '空闲'}
+        </div>
+      </div>
+
+      <div className="timer-value" aria-label={timerText}>
+        {parts.length === 3 ? (
+          <>
+            <span className="timer-group">{parts[0]}</span>
+            <span className="timer-separator">:</span>
+            <span className="timer-group">{parts[1]}</span>
+            <span className="timer-separator">:</span>
+            <span className="timer-group">{parts[2]}</span>
+          </>
+        ) : (
+          timerText
+        )}
+      </div>
+      <div className="timer-meta">
+        <div className="timer-note">{timerLabel}</div>
+        <div className="project-actions">
+          <button className="btn btn-secondary" onClick={() => onEdit(project.id)}>
+            编辑
+          </button>
+          <button className="btn btn-secondary" onClick={() => onDelete(project.id)}>
+            删除
+          </button>
+        </div>
+      </div>
+
+      <div className="mini-stats">
+        <div className="mini-stat">
+          <strong>{todayDuration}</strong>
+          <span>今日累计</span>
+        </div>
+        <div className="mini-stat">
+          <strong>{weekDuration}</strong>
+          <span>最近 7 天</span>
+        </div>
+        <div className="mini-stat">
+          <strong>{interruptionCount}</strong>
+          <span>打断次数</span>
+        </div>
+      </div>
+
+      <div className="mini-stats secondary">
+        <div className="mini-stat">
+          <strong>{completedCount}</strong>
+          <span>达标会话</span>
+        </div>
+        <div className="mini-stat">
+          <strong>{project.category}</strong>
+          <span>项目类型</span>
+        </div>
+        <div className="mini-stat">
+          <strong>{project.targetMinutes}m</strong>
+          <span>单次目标</span>
+        </div>
+      </div>
+
+      <div className="card-actions">
+        <button
+          className={`btn ${isActive ? 'btn-danger' : 'btn-primary'}`}
+          onClick={() => (isActive ? onStop() : onStart(project.id))}
+        >
+          {buttonLabel}
+        </button>
+      </div>
+    </article>
+  );
+};
+
+export default ProjectCard;
