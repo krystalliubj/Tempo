@@ -8,7 +8,7 @@ import {
   TimerSession,
 } from '../types';
 
-export const STORAGE_KEY = 'tempo-react-v1';
+export const STORAGE_KEY = 'tempo-react-v2';
 
 export const CATEGORY_OPTIONS: ProjectCategory[] = ['专注', '运动', '学习', '休息', '自定义'];
 
@@ -29,19 +29,19 @@ export function createDefaultProjects(): TimerProject[] {
   return [
     {
       id: createId(),
-      name: '深度工作',
+      name: '专注工作',
       category: '专注',
       color: '#6366f1',
-      targetMinutes: 25,
-      createdAt: Date.now() - 2000,
+      targetMinutes: 45,
+      createdAt: Date.now() - 1000,
     },
     {
       id: createId(),
-      name: '起身活动',
+      name: '活动一下',
       category: '运动',
       color: '#10b981',
       targetMinutes: 10,
-      createdAt: Date.now() - 1000,
+      createdAt: Date.now() - 2000,
     },
   ];
 }
@@ -110,15 +110,28 @@ export function formatClock(totalSeconds: number): string {
   ].join(':');
 }
 
+export function formatAdaptiveClock(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remain = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}`;
+  }
+
+  return `${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}`;
+}
+
 export function formatCountdownClock(targetMinutes: number, elapsedSec: number): string {
   const targetSeconds = Math.max(0, Math.round(targetMinutes * 60));
   const diffSeconds = targetSeconds - Math.max(0, Math.floor(elapsedSec));
 
   if (diffSeconds >= 0) {
-    return formatClock(diffSeconds);
+    return formatAdaptiveClock(diffSeconds);
   }
 
-  return `+${formatClock(Math.abs(diffSeconds))}`;
+  return `+${formatAdaptiveClock(Math.abs(diffSeconds))}`;
 }
 
 export function getCountdownMeta(targetMinutes: number, elapsedSec: number): {
@@ -130,14 +143,14 @@ export function getCountdownMeta(targetMinutes: number, elapsedSec: number): {
 
   if (safeElapsed > targetSeconds) {
     return {
-      timerText: `+${formatClock(safeElapsed - targetSeconds)}`,
-      timerLabel: '已超时（时:分:秒）',
+      timerText: `+${formatAdaptiveClock(safeElapsed - targetSeconds)}`,
+      timerLabel: '已超时',
     };
   }
 
   return {
-    timerText: formatClock(targetSeconds - safeElapsed),
-    timerLabel: '剩余时间（时:分:秒）',
+    timerText: formatAdaptiveClock(targetSeconds - safeElapsed),
+    timerLabel: '剩余时间',
   };
 }
 

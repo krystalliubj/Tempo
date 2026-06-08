@@ -13,8 +13,8 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({ sessions, onDeleteSession
     <section className="panel glass">
       <span className="eyebrow">Sessions</span>
       <div className="section-title">
-        <h2>最近会话</h2>
-        <span className="subtle">用于回看开始时间、结束时间、是否达标和是否被打断</span>
+        <h2>计时记录</h2>
+        <span className="subtle">用于回看开始时间、结束时间、是否达标和是否中断</span>
       </div>
 
       {sessions.length === 0 ? (
@@ -33,7 +33,7 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({ sessions, onDeleteSession
               <span
                 className={`badge ${session.interrupted ? 'badge-danger' : 'badge-success'}`}
               >
-                {session.interrupted ? '被打断' : '已达标'}
+                {session.interrupted ? '中断' : '达标'}
               </span>
               <button
                 type="button"

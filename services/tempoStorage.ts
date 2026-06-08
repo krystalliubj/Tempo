@@ -10,8 +10,11 @@ import {
   formatDateTime,
 } from '../utils/tempo';
 
+const STORAGE_RESET_MARKER_KEY = 'tempo-storage-reset-v1';
+
 export function loadTempoState(): TempoState {
   try {
+    ensureFreshTempoStorage();
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return createDefaultState();
@@ -51,6 +54,27 @@ export function loadTempoState(): TempoState {
     console.error('Failed to load Tempo state:', error);
     return createDefaultState();
   }
+}
+
+function ensureFreshTempoStorage(): void {
+  if (localStorage.getItem(STORAGE_RESET_MARKER_KEY) === 'done') {
+    return;
+  }
+
+  const keysToDelete: string[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key) {
+      continue;
+    }
+
+    if (key.startsWith('tempo-react-v')) {
+      keysToDelete.push(key);
+    }
+  }
+
+  keysToDelete.forEach((key) => localStorage.removeItem(key));
+  localStorage.setItem(STORAGE_RESET_MARKER_KEY, 'done');
 }
 
 export function saveTempoState(state: TempoState): void {

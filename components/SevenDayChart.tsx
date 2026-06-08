@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { TempoState, TimerProject } from '../types';
 import {
+  formatDateKey,
   formatDurationCompact,
   formatShortDate,
-  getCategoryDuration,
+  getAllSessions,
   getChartProjects,
   getLastNDays,
   getProjectDurationByDate,
@@ -45,15 +46,71 @@ const SevenDayChart: React.FC<SevenDayChartProps> = ({ state, now }) => {
     return Math.max(currentMax, 3600);
   }, [chartData]);
 
-  const weekFocus = getCategoryDuration(state, now, dateKeys, '专注');
-  const weekExercise = getCategoryDuration(state, now, dateKeys, '运动');
+  const summaryMetrics = useMemo(() => {
+    const weekDateKeySet = new Set(dateKeys);
+    const displayedProjectTotals = projects
+      .map((project) => ({
+        name: project.name,
+        durationSec: dateKeys.reduce(
+          (total, dateKey) => total + getProjectDurationByDate(project.id, state, now, dateKey),
+          0,
+        ),
+      }))
+      .sort((a, b) => b.durationSec - a.durationSec);
+    const highestProject = displayedProjectTotals.find((item) => item.durationSec > 0) || null;
+
+    const weekSessions = getAllSessions(state, now, true).filter((session) =>
+      weekDateKeySet.has(formatDateKey(session.endAt)),
+    );
+    const weekInterruptedCount = weekSessions.filter((session) => session.interrupted).length;
+    const longestSession = weekSessions.reduce(
+      (longest, session) => (session.durationSec > longest.durationSec ? session : longest),
+      weekSessions[0] || null,
+    );
+
+    const busiestDay = chartData.reduce(
+      (best, day) => {
+        const totalDurationSec = day.values.reduce((total, item) => total + item.durationSec, 0);
+        if (totalDurationSec > best.totalDurationSec) {
+          return {
+            dateKey: day.dateKey,
+            totalDurationSec,
+          };
+        }
+        return best;
+      },
+      { dateKey: '', totalDurationSec: 0 },
+    );
+
+    return [
+      {
+        label: '最高时长项目',
+        value: highestProject ? highestProject.name : '暂无',
+      },
+      {
+        label: '本周中断次数',
+        value: String(weekInterruptedCount),
+      },
+      {
+        label: '最长单次专注',
+        value: longestSession ? formatDurationCompact(longestSession.durationSec) : '0m',
+      },
+      {
+        label: '最活跃日期',
+        value:
+          busiestDay.totalDurationSec > 0
+            ? `${formatShortDate(busiestDay.dateKey)} · ${formatDurationCompact(busiestDay.totalDurationSec)}`
+            : '暂无',
+      },
+    ];
+  }, [chartData, dateKeys, now, projects, state]);
 
   return (
     <section className="panel glass">
       <span className="eyebrow">7-Day View</span>
       <div className="section-title">
         <h2>最近 7 天项目时长</h2>
-        <span className="subtle">分组柱状图，每天按项目拆分展示</span>
+        <span className="subtle">分组柱状图，按项目类型展示</span>
       </div>
 
       <div className="chart-legend">
@@ -70,10 +127,9 @@ const SevenDayChart: React.FC<SevenDayChartProps> = ({ state, now }) => {
       </div>
 
       <div className="chart-summary">
-        <SummaryPill label="本周专注总计" value={formatDurationCompact(weekFocus)} />
-        <SummaryPill label="本周运动总计" value={formatDurationCompact(weekExercise)} />
-        <SummaryPill label="日均专注" value={formatDurationCompact(Math.round(weekFocus / 7))} />
-        <SummaryPill label="日均运动" value={formatDurationCompact(Math.round(weekExercise / 7))} />
+        {summaryMetrics.map((metric) => (
+          <SummaryPill key={metric.label} label={metric.label} value={metric.value} />
+        ))}
       </div>
     </section>
   );

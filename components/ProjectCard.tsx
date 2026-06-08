@@ -46,7 +46,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
           <h3 className="project-name">{project.name}</h3>
           <div className="project-meta">
             <span>目标 {project.targetMinutes} 分钟</span>
-            <span>{project.targetMinutes} 分钟 / 单次目标</span>
           </div>
         </div>
         <div className="status-chip project-status">
@@ -56,14 +55,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
       </div>
 
       <div className="timer-value" aria-label={timerText}>
-        {parts.length === 3 ? (
+        {parts.length === 2 || parts.length === 3 ? (
           <>
             {hasOvertimePrefix && <span className="timer-sign">+</span>}
-            <span className="timer-group">{parts[0]}</span>
-            <span className="timer-separator">:</span>
-            <span className="timer-group">{parts[1]}</span>
-            <span className="timer-separator">:</span>
-            <span className="timer-group">{parts[2]}</span>
+            {parts.map((part, index) => (
+              <React.Fragment key={`${part}-${index}`}>
+                {index > 0 && <span className="timer-separator">:</span>}
+                <span className="timer-group">{part}</span>
+              </React.Fragment>
+            ))}
           </>
         ) : (
           timerText
@@ -92,7 +92,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
         </div>
         <div className="mini-stat">
           <strong>{interruptionCount}</strong>
-          <span>打断次数</span>
+          <span>中断次数</span>
         </div>
       </div>
 

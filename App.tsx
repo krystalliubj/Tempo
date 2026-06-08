@@ -21,6 +21,7 @@ import {
   clampMinutes,
   createId,
   createSessionFromActive,
+  formatAdaptiveClock,
   formatClock,
   formatCountdownClock,
   formatDateKey,
@@ -77,8 +78,8 @@ const App: React.FC = () => {
     ? getCountdownMeta(activeProject.targetMinutes, activeElapsedSec)
     : null;
   const activeOvertime = activeProject
-    ? formatClock(Math.max(0, activeElapsedSec - activeProject.targetMinutes * 60))
-    : '00:00:00';
+    ? formatAdaptiveClock(Math.max(0, activeElapsedSec - activeProject.targetMinutes * 60))
+    : '00:00';
 
   useEffect(() => {
     saveTempoState(state);
@@ -144,8 +145,14 @@ const App: React.FC = () => {
   const overviewStats = useMemo(() => {
     const todayDuration = getTotalDurationByDate(state, now, todayKey);
     const todayInterruptions = getInterruptedCountByDate(state, todayKey);
-    const weekFocus = getCategoryDuration(state, now, last7Days, '专注');
-    const weekExercise = getCategoryDuration(state, now, last7Days, '运动');
+    const weekTotalDuration = last7Days.reduce(
+      (total, dateKey) => total + getTotalDurationByDate(state, now, dateKey),
+      0,
+    );
+    const weekDateKeySet = new Set(last7Days);
+    const weekCompletedCount = state.sessions.filter(
+      (session) => session.reachedTarget && weekDateKeySet.has(formatDateKey(session.endAt)),
+    ).length;
 
     return [
       {
@@ -157,27 +164,27 @@ const App: React.FC = () => {
         label: '当前计时',
         value: state.activeSession && activeCountdown ? activeCountdown.timerText : '--:--:--',
         note: state.activeSession && activeCountdown
-          ? `${activeCountdown.timerLabel} · 目标 ${activeProject?.targetMinutes || 0} 分钟`
+          ? `目标 ${activeProject?.targetMinutes || 0} 分钟`
           : '可以从任意项目开始',
       },
       {
         label: '今日累计',
         value: formatDurationCompact(todayDuration),
-        note: '真实累计，不是提醒次数',
+        note: '真实项目时间累计',
       },
       {
-        label: '今日打断',
+        label: '今日中断',
         value: String(todayInterruptions),
-        note: todayInterruptions ? '未达到目标即结束的次数' : '今天还没有打断',
+        note: todayInterruptions ? '未达目标即结束次数' : '今天还没有中断',
       },
       {
-        label: '本周专注',
-        value: formatDurationCompact(weekFocus),
+        label: '本周总时长',
+        value: formatDurationCompact(weekTotalDuration),
         note: '最近 7 天',
       },
       {
-        label: '本周运动',
-        value: formatDurationCompact(weekExercise),
+        label: '本周达标次数',
+        value: String(weekCompletedCount),
         note: '最近 7 天',
       },
     ];
@@ -628,8 +635,10 @@ const App: React.FC = () => {
           margin-top: 18px;
           font-size: 40px;
           font-weight: 900;
-          letter-spacing: -0.05em;
+          letter-spacing: -0.02em;
           font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum" 1, "lnum" 1;
+          font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
         }
       </style>
       <div class="mini-shell">
@@ -657,7 +666,7 @@ const App: React.FC = () => {
           <div>
             <h1>Tempo</h1>
             <p className="subtle">
-              多项目单活跃计时器，离线记录每日真实累计时长、打断次数与近 7 天趋势。
+              多项目计时看板，量化每日真实专注时长。
             </p>
           </div>
         </div>
@@ -752,9 +761,9 @@ const App: React.FC = () => {
               </button>
             </form>
 
-            <p className="hint">所有项目会同时显示在右侧；任意时刻最多只有一个项目处于计时中。</p>
+            <p className="hint">任意时刻最多只有一个项目处于计时中</p>
             <div className="mini-window-note">
-              迷你计时窗适合作为桌面小看板的前端原型，它只显示当前项目与倒计时。
+              迷你计时窗可作为悬浮窗使用，只显示当前计时项目。
             </div>
           </section>
 
@@ -817,12 +826,12 @@ const App: React.FC = () => {
                       timerText={
                         isActive
                           ? formatCountdownClock(project.targetMinutes, activeElapsedSec)
-                          : formatClock(todayDuration)
+                          : formatAdaptiveClock(todayDuration)
                       }
                       timerLabel={
                         isActive
                           ? getCountdownMeta(project.targetMinutes, activeElapsedSec).timerLabel
-                          : '今日累计（时:分:秒）'
+                          : '今日累计'
                       }
                       todayDuration={formatDurationCompact(todayDuration)}
                       weekDuration={formatDurationCompact(weekDuration)}
