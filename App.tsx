@@ -10,6 +10,7 @@ import {
   exportDailySummaryCsv,
   exportJsonBackup,
   exportSessionsCsv,
+  importJsonBackup,
   loadTempoState,
   saveTempoState,
 } from './services/tempoStorage';
@@ -67,6 +68,7 @@ const App: React.FC = () => {
   const toastTimerRef = useRef<number | null>(null);
   const reminderAudioRef = useRef<HTMLAudioElement | null>(null);
   const miniWindowRef = useRef<Window | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const todayKey = formatDateKey(now);
   const last7Days = getLastNDays(7);
@@ -319,6 +321,28 @@ const App: React.FC = () => {
       window.clearTimeout(toastTimerRef.current);
     }
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2600);
+  }
+
+  async function handleImportBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const importedState = await importJsonBackup(file);
+      setState(importedState);
+      setEditingProjectId(null);
+      setActiveSelect(null);
+      setShowCustomDraftColor(false);
+      setShowCustomEditColor(false);
+      showToast('备份已导入，本地数据已恢复。');
+    } catch (error) {
+      console.error('Failed to import backup:', error);
+      showToast('导入失败，请选择 Tempo 导出的 JSON 备份文件。');
+    }
   }
 
   function handleDraftChange<K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) {
@@ -672,18 +696,16 @@ const App: React.FC = () => {
         </div>
 
         <div className="toolbar">
-          <button className="btn btn-secondary" onClick={() => exportSessionsCsv(state.sessions)}>
-            导出计时明细
-          </button>
-          <button className="btn btn-secondary" onClick={() => exportDailySummaryCsv(state)}>
-            导出日汇总
-          </button>
-          <button className="btn btn-secondary" onClick={() => exportJsonBackup(state)}>
-            导出完整备份
-          </button>
           <button className="btn btn-primary toolbar-main-action" onClick={openMiniWindow}>
             打开迷你计时窗
           </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={handleImportBackup}
+          />
         </div>
       </header>
 
@@ -692,7 +714,7 @@ const App: React.FC = () => {
           <section className="panel glass">
             <span className="eyebrow">Create Project</span>
             <div className="section-title">
-              <h2>新增计时项目</h2>
+              <h2>新增计时</h2>
             </div>
 
             <form className="field-grid" onSubmit={handleCreateProject}>
@@ -772,7 +794,24 @@ const App: React.FC = () => {
           <section className="panel glass">
             <span className="eyebrow">Data Export</span>
             <div className="section-title">
-              <h3>导出说明</h3>
+              <h3>数据迁移</h3>
+            </div>
+            <div className="data-actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() => importInputRef.current?.click()}
+              >
+                导入备份
+              </button>
+              <button className="btn btn-secondary" onClick={() => exportSessionsCsv(state.sessions)}>
+                导出计时明细
+              </button>
+              <button className="btn btn-secondary" onClick={() => exportDailySummaryCsv(state)}>
+                导出日汇总
+              </button>
+              <button className="btn btn-secondary" onClick={() => exportJsonBackup(state)}>
+                导出完整备份
+              </button>
             </div>
             <ul className="helper-list">
               <li>

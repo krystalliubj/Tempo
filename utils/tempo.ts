@@ -8,7 +8,8 @@ import {
   TimerSession,
 } from '../types';
 
-export const STORAGE_KEY = 'tempo-react-v2';
+export const STORAGE_KEY = 'tempo-react';
+export const STORAGE_BACKUP_KEY = 'tempo-react-backup';
 
 export const CATEGORY_OPTIONS: ProjectCategory[] = ['专注', '运动', '学习', '休息', '自定义'];
 
