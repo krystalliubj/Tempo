@@ -321,6 +321,8 @@ button {
 
 .project-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   padding: 22px;
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.88);
@@ -545,7 +547,8 @@ button {
 .card-actions {
   display: flex;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: auto;
+  padding-top: 18px;
 }
 
 .card-actions .btn {
