@@ -44,6 +44,26 @@ import {
 const REMINDER_STAGE_DELAYS_SEC = [0, 60, 180, 300, 600] as const;
 const REMINDER_STAGE_LABELS = ['到点', '1 分钟', '3 分钟', '5 分钟', '10 分钟'] as const;
 
+interface MiniWindowPayload {
+  sessionId: string | null;
+  projectName: string;
+  statusText: string;
+  startAt: number | null;
+  targetMinutes: number;
+  reminderStage: number;
+}
+
+type TempoWindow = Window &
+  typeof globalThis & {
+    __tempoMiniHandleReminder?: (stage: number) => void;
+  };
+
+type MiniWindowHandle = TempoWindow &
+  typeof globalThis & {
+    __tempoMiniReady?: boolean;
+    __tempoMiniUpdate?: (payload: MiniWindowPayload) => void;
+  };
+
 const App: React.FC = () => {
   const [state, setState] = useState<TempoState>(() => loadTempoState());
   const [now, setNow] = useState(() => Date.now());
@@ -84,6 +104,24 @@ const App: React.FC = () => {
   const activeOvertime = activeProject
     ? formatAdaptiveClock(Math.max(0, activeElapsedSec - activeProject.targetMinutes * 60))
     : '00:00';
+  const miniWindowPayload = useMemo<MiniWindowPayload>(
+    () => ({
+      sessionId: state.activeSession?.id ?? null,
+      projectName: activeProject?.name || '当前空闲',
+      statusText: state.activeSession ? activeProject?.category || '专注' : '等待开始',
+      startAt: state.activeSession?.startAt ?? null,
+      targetMinutes: activeProject?.targetMinutes || 0,
+      reminderStage: state.activeSession?.reminderStage ?? -1,
+    }),
+    [
+      activeProject?.category,
+      activeProject?.name,
+      activeProject?.targetMinutes,
+      state.activeSession?.id,
+      state.activeSession?.reminderStage,
+      state.activeSession,
+    ],
+  );
 
   useEffect(() => {
     saveTempoState(state);
@@ -126,7 +164,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     syncMiniWindow();
-  }, [activeElapsedSec, activeProject, state.activeSession]);
+  }, [miniWindowPayload]);
+
+  useEffect(() => {
+    const hostWindow = window as TempoWindow;
+    hostWindow.__tempoMiniHandleReminder = (stage: number) => {
+      triggerReminder(stage, {
+        playSound: false,
+        showSystemNotification: false,
+      });
+    };
+
+    return () => {
+      delete hostWindow.__tempoMiniHandleReminder;
+    };
+  }, [activeProject?.name, state.activeSession?.id, state.activeSession?.reminderStage]);
 
   useEffect(() => {
     const audio = new Audio('/sounds/universfield-new-notification-036-485897.mp3');
@@ -200,7 +252,14 @@ const App: React.FC = () => {
     ? getProjectById(state.projects, editingProjectId)
     : null;
 
-  function triggerReminder(stage: number) {
+  function triggerReminder(
+    stage: number,
+    options: {
+      playSound?: boolean;
+      showSystemNotification?: boolean;
+    } = {},
+  ) {
+    const { playSound: shouldPlaySound = true, showSystemNotification = true } = options;
     const triggeredAt = Date.now();
     setState((current) => {
       if (!current.activeSession || stage <= current.activeSession.reminderStage) {
@@ -220,9 +279,11 @@ const App: React.FC = () => {
 
     const name = activeProject?.name || '当前项目';
     showToast(getReminderToast(name, stage));
-    playReminder();
+    if (shouldPlaySound) {
+      playReminder();
+    }
 
-    if ('Notification' in window) {
+    if (showSystemNotification && 'Notification' in window) {
       if (Notification.permission === 'granted') {
         void new Notification('Tempo 计时到点', {
           body: getReminderToast(name, stage),
@@ -620,97 +681,322 @@ const App: React.FC = () => {
     miniWindowRef.current = null;
   }
 
-  function escapeMiniHtml(value: string) {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+  function ensureMiniWindowShell(popup: MiniWindowHandle) {
+    if (popup.__tempoMiniReady) {
+      return;
+    }
+
+    popup.document.open();
+    popup.document.write(`
+      <!doctype html>
+      <html lang="zh-CN">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Tempo Mini</title>
+          <style>
+            body {
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+              background: linear-gradient(135deg, #eef2ff, #f8fafc);
+              color: #0f172a;
+            }
+            .mini-shell {
+              width: calc(100vw - 24px);
+              padding: 20px;
+              border-radius: 24px;
+              background: rgba(255, 255, 255, 0.92);
+              box-shadow: 0 20px 40px rgba(79, 70, 229, 0.14);
+              border: 1px solid rgba(255, 255, 255, 0.8);
+              box-sizing: border-box;
+            }
+            .mini-topbar {
+              display: flex;
+              align-items: center;
+              justify-content: flex-start;
+              margin-bottom: 12px;
+            }
+            .mini-label {
+              display: inline-block;
+              font-size: 11px;
+              letter-spacing: 0.18em;
+              text-transform: uppercase;
+              color: #818cf8;
+              font-weight: 800;
+            }
+            .mini-name {
+              margin: 0;
+              font-size: 24px;
+              font-weight: 900;
+            }
+            .mini-status {
+              margin: 8px 0 0;
+              color: #64748b;
+              font-size: 13px;
+            }
+            .mini-time {
+              margin-top: 18px;
+              font-size: 40px;
+              font-weight: 900;
+              letter-spacing: -0.02em;
+              font-variant-numeric: tabular-nums;
+              font-feature-settings: "tnum" 1, "lnum" 1;
+              font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="mini-shell">
+            <div class="mini-topbar">
+              <span class="mini-label">Tempo Mini</span>
+            </div>
+            <h1 class="mini-name" id="mini-name">当前空闲</h1>
+            <p class="mini-status" id="mini-status">等待开始</p>
+            <div class="mini-time" id="mini-time">--:--:--</div>
+          </div>
+          <script>
+            (function () {
+              var payload = {
+                sessionId: null,
+                projectName: '当前空闲',
+                statusText: '等待开始',
+                startAt: null,
+                targetMinutes: 0,
+                reminderStage: -1
+              };
+              var reminderStageDelays = ${JSON.stringify([...REMINDER_STAGE_DELAYS_SEC])};
+              var reminderStageLabels = ${JSON.stringify([...REMINDER_STAGE_LABELS])};
+              var nameNode = document.getElementById('mini-name');
+              var statusNode = document.getElementById('mini-status');
+              var timeNode = document.getElementById('mini-time');
+              var reminderAudio = null;
+              var localReminderStage = -1;
+              var titleTimer = null;
+              var baseTitle = 'Tempo Mini';
+
+              function formatAdaptiveClock(totalSeconds) {
+                var seconds = Math.max(0, Math.floor(totalSeconds));
+                var hours = Math.floor(seconds / 3600);
+                var minutes = Math.floor((seconds % 3600) / 60);
+                var remain = seconds % 60;
+
+                if (hours > 0) {
+                  return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(remain).padStart(2, '0');
+                }
+
+                return String(minutes).padStart(2, '0') + ':' + String(remain).padStart(2, '0');
+              }
+
+              function formatCountdownClock(targetMinutes, elapsedSec) {
+                var targetSeconds = Math.max(0, Math.round(targetMinutes * 60));
+                var diffSeconds = targetSeconds - Math.max(0, Math.floor(elapsedSec));
+
+                if (diffSeconds >= 0) {
+                  return formatAdaptiveClock(diffSeconds);
+                }
+
+                return '+' + formatAdaptiveClock(Math.abs(diffSeconds));
+              }
+
+              function getDueStage(targetMinutes, elapsedSec) {
+                var targetSeconds = Math.max(0, Math.round(targetMinutes * 60));
+                var overdueSec = Math.max(0, Math.floor(elapsedSec) - targetSeconds);
+                if (targetSeconds <= 0 || overdueSec < 0) {
+                  return -1;
+                }
+
+                var dueStage = -1;
+                reminderStageDelays.forEach(function (delaySec, index) {
+                  if (overdueSec >= delaySec) {
+                    dueStage = index;
+                  }
+                });
+                return dueStage;
+              }
+
+              function getReminderText(projectName, stage) {
+                if (stage === 0) {
+                  return projectName + ' 已到设定时间，请停止当前计时或继续专注。';
+                }
+
+                var stageLabel = reminderStageLabels[stage] || (stage + ' 阶段');
+                return projectName + ' 已超时 ' + stageLabel + '，请确认是否继续当前计时。';
+              }
+
+              function flashTitle(reminderText) {
+                if (titleTimer) {
+                  window.clearInterval(titleTimer);
+                }
+
+                var highlighted = false;
+                titleTimer = window.setInterval(function () {
+                  document.title = highlighted ? baseTitle : '提醒: ' + reminderText;
+                  highlighted = !highlighted;
+                }, 900);
+
+                window.setTimeout(function () {
+                  if (titleTimer) {
+                    window.clearInterval(titleTimer);
+                    titleTimer = null;
+                  }
+                  document.title = baseTitle;
+                }, 6000);
+              }
+
+              function playReminderFallback() {
+                try {
+                  var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                  if (!AudioContextClass) {
+                    return;
+                  }
+
+                  var context = new AudioContextClass();
+                  var pattern = [
+                    { delay: 0, duration: 0.22, frequency: 880, peak: 0.15 },
+                    { delay: 0.4, duration: 0.22, frequency: 880, peak: 0.14 },
+                    { delay: 0.8, duration: 0.26, frequency: 932, peak: 0.15 }
+                  ];
+
+                  pattern.forEach(function (item) {
+                    var oscillator = context.createOscillator();
+                    var gainNode = context.createGain();
+                    oscillator.connect(gainNode);
+                    gainNode.connect(context.destination);
+                    oscillator.type = 'triangle';
+                    oscillator.frequency.value = item.frequency;
+                    gainNode.gain.value = 0.0001;
+                    oscillator.start(context.currentTime + item.delay);
+                    gainNode.gain.exponentialRampToValueAtTime(
+                      item.peak,
+                      context.currentTime + item.delay + 0.03
+                    );
+                    gainNode.gain.exponentialRampToValueAtTime(
+                      0.0001,
+                      context.currentTime + item.delay + item.duration
+                    );
+                    oscillator.stop(context.currentTime + item.delay + item.duration + 0.04);
+                  });
+
+                  var totalDuration = pattern[pattern.length - 1].delay + pattern[pattern.length - 1].duration + 0.12;
+                  window.setTimeout(function () {
+                    if (context && typeof context.close === 'function') {
+                      context.close().catch(function () {
+                        return undefined;
+                      });
+                    }
+                  }, totalDuration * 1000);
+                } catch (error) {
+                  console.warn('Mini reminder audio not available:', error);
+                }
+              }
+
+              function playReminderSound() {
+                if (!reminderAudio) {
+                  reminderAudio = new Audio('/sounds/universfield-new-notification-036-485897.mp3');
+                  reminderAudio.preload = 'auto';
+                }
+
+                reminderAudio.pause();
+                reminderAudio.currentTime = 0;
+                reminderAudio.volume = 0.92;
+                reminderAudio.play().catch(function () {
+                  playReminderFallback();
+                });
+              }
+
+              function notifyHost(stage) {
+                try {
+                  if (
+                    window.opener &&
+                    !window.opener.closed &&
+                    typeof window.opener.__tempoMiniHandleReminder === 'function'
+                  ) {
+                    window.opener.__tempoMiniHandleReminder(stage);
+                  }
+                } catch (error) {
+                  console.warn('Mini reminder cannot sync to opener:', error);
+                }
+              }
+
+              function triggerMiniReminder(stage) {
+                var reminderText = getReminderText(payload.projectName, stage);
+                playReminderSound();
+                flashTitle(reminderText);
+
+                if ('Notification' in window) {
+                  if (Notification.permission === 'granted') {
+                    new Notification('Tempo 计时到点', {
+                      body: reminderText
+                    });
+                  } else if (Notification.permission === 'default') {
+                    Notification.requestPermission();
+                  }
+                }
+
+                notifyHost(stage);
+              }
+
+              function render() {
+                if (!nameNode || !statusNode || !timeNode) {
+                  return;
+                }
+
+                nameNode.textContent = payload.projectName;
+                statusNode.textContent = payload.statusText;
+
+                if (!payload.startAt) {
+                  localReminderStage = -1;
+                  document.title = baseTitle;
+                  timeNode.textContent = '--:--:--';
+                  return;
+                }
+
+                var elapsedSec = Math.max(1, Math.round((Date.now() - payload.startAt) / 1000));
+                timeNode.textContent = formatCountdownClock(payload.targetMinutes, elapsedSec);
+
+                var knownStage = Math.max(localReminderStage, payload.reminderStage);
+                var dueStage = getDueStage(payload.targetMinutes, elapsedSec);
+                if (dueStage > knownStage) {
+                  localReminderStage = dueStage;
+                  triggerMiniReminder(dueStage);
+                }
+              }
+
+              window.__tempoMiniUpdate = function (nextPayload) {
+                var isNewSession = payload.sessionId !== nextPayload.sessionId;
+                payload = nextPayload;
+                localReminderStage = isNewSession
+                  ? nextPayload.reminderStage
+                  : Math.max(localReminderStage, nextPayload.reminderStage);
+                document.title = baseTitle;
+                render();
+              };
+
+              render();
+              window.setInterval(render, 250);
+            })();
+          <\/script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+    popup.__tempoMiniReady = true;
   }
 
   function syncMiniWindow() {
-    const popup = miniWindowRef.current;
+    const popup = miniWindowRef.current as MiniWindowHandle | null;
     if (!popup || popup.closed) {
       miniWindowRef.current = null;
       return;
     }
 
-    const timerText =
-      state.activeSession && activeProject
-        ? formatCountdownClock(activeProject.targetMinutes, activeElapsedSec)
-        : '--:--:--';
-    const projectName = activeProject?.name || '当前空闲';
-    const statusText = state.activeSession ? activeProject?.category || '专注' : '等待开始';
-    const projectNameHtml = escapeMiniHtml(projectName);
-    const statusTextHtml = escapeMiniHtml(statusText);
-    const timerTextHtml = escapeMiniHtml(timerText);
-
+    ensureMiniWindowShell(popup);
     popup.document.title = 'Tempo Mini';
-    popup.document.body.innerHTML = `
-      <style>
-        body {
-          margin: 0;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-          background: linear-gradient(135deg, #eef2ff, #f8fafc);
-          color: #0f172a;
-        }
-        .mini-shell {
-          width: calc(100vw - 24px);
-          padding: 20px;
-          border-radius: 24px;
-          background: rgba(255, 255, 255, 0.92);
-          box-shadow: 0 20px 40px rgba(79, 70, 229, 0.14);
-          border: 1px solid rgba(255, 255, 255, 0.8);
-          box-sizing: border-box;
-        }
-        .mini-topbar {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          margin-bottom: 12px;
-        }
-        .mini-label {
-          display: inline-block;
-          font-size: 11px;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: #818cf8;
-          font-weight: 800;
-        }
-        .mini-name {
-          margin: 0;
-          font-size: 24px;
-          font-weight: 900;
-        }
-        .mini-status {
-          margin: 8px 0 0;
-          color: #64748b;
-          font-size: 13px;
-        }
-        .mini-time {
-          margin-top: 18px;
-          font-size: 40px;
-          font-weight: 900;
-          letter-spacing: -0.02em;
-          font-variant-numeric: tabular-nums;
-          font-feature-settings: "tnum" 1, "lnum" 1;
-          font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-        }
-      </style>
-      <div class="mini-shell">
-        <div class="mini-topbar">
-          <span class="mini-label">Tempo Mini</span>
-        </div>
-        <h1 class="mini-name">${projectNameHtml}</h1>
-        <p class="mini-status">${statusTextHtml}</p>
-        <div class="mini-time">${timerTextHtml}</div>
-      </div>
-    `;
+    popup.__tempoMiniUpdate?.(miniWindowPayload);
 
     popup.onbeforeunload = () => {
       if (miniWindowRef.current === popup) {
