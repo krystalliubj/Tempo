@@ -64,6 +64,8 @@ const App: React.FC = () => {
   const [activeSelect, setActiveSelect] = useState<'create-category' | 'edit-category' | null>(null);
   const [showCustomDraftColor, setShowCustomDraftColor] = useState(false);
   const [showCustomEditColor, setShowCustomEditColor] = useState(false);
+  const [draggingProjectId, setDraggingProjectId] = useState<string | null>(null);
+  const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
 
   const toastTimerRef = useRef<number | null>(null);
   const reminderAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -192,19 +194,7 @@ const App: React.FC = () => {
     ];
   }, [activeCountdown, activeElapsedSec, activeProject, last7Days, now, state, todayKey]);
 
-  const sortedProjects = useMemo(() => {
-    return [...state.projects].sort((a, b) => {
-      if (state.activeSession?.projectId === a.id) {
-        return -1;
-      }
-
-      if (state.activeSession?.projectId === b.id) {
-        return 1;
-      }
-
-      return b.createdAt - a.createdAt;
-    });
-  }, [state.activeSession, state.projects]);
+  const sortedProjects = useMemo(() => state.projects, [state.projects]);
 
   const editingProject = editingProjectId
     ? getProjectById(state.projects, editingProjectId)
@@ -464,6 +454,53 @@ const App: React.FC = () => {
       ...current,
       projects: current.projects.filter((project) => project.id !== projectId),
     }));
+  }
+
+  function handleProjectDragStart(projectId: string) {
+    setDraggingProjectId(projectId);
+    setDragOverProjectId(projectId);
+  }
+
+  function handleProjectDragOver(projectId: string) {
+    if (!draggingProjectId || draggingProjectId === projectId) {
+      return;
+    }
+
+    setDragOverProjectId(projectId);
+  }
+
+  function handleProjectDrop(targetProjectId: string) {
+    if (!draggingProjectId || draggingProjectId === targetProjectId) {
+      setDraggingProjectId(null);
+      setDragOverProjectId(null);
+      return;
+    }
+
+    setState((current) => {
+      const sourceIndex = current.projects.findIndex((project) => project.id === draggingProjectId);
+      const targetIndex = current.projects.findIndex((project) => project.id === targetProjectId);
+
+      if (sourceIndex === -1 || targetIndex === -1) {
+        return current;
+      }
+
+      const nextProjects = [...current.projects];
+      const [movedProject] = nextProjects.splice(sourceIndex, 1);
+      nextProjects.splice(targetIndex, 0, movedProject);
+
+      return {
+        ...current,
+        projects: nextProjects,
+      };
+    });
+
+    setDraggingProjectId(null);
+    setDragOverProjectId(null);
+  }
+
+  function handleProjectDragEnd() {
+    setDraggingProjectId(null);
+    setDragOverProjectId(null);
   }
 
   function deleteSession(sessionId: string) {
@@ -862,6 +899,8 @@ const App: React.FC = () => {
                       key={project.id}
                       project={project}
                       isActive={Boolean(isActive)}
+                      isDragging={draggingProjectId === project.id}
+                      isDragOver={dragOverProjectId === project.id && draggingProjectId !== project.id}
                       timerText={
                         isActive
                           ? formatCountdownClock(project.targetMinutes, activeElapsedSec)
@@ -877,6 +916,10 @@ const App: React.FC = () => {
                       interruptionCount={interruptedCount}
                       completedCount={completedCount}
                       hasRunningSession={Boolean(state.activeSession)}
+                      onDragStart={handleProjectDragStart}
+                      onDragOver={handleProjectDragOver}
+                      onDrop={handleProjectDrop}
+                      onDragEnd={handleProjectDragEnd}
                       onEdit={openEditProject}
                       onStart={startProject}
                       onStop={() => stopActiveSession('manual')}

@@ -326,6 +326,7 @@ button {
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.7);
   overflow: hidden;
+  cursor: grab;
 }
 
 .project-card.active {
@@ -345,6 +346,24 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.project-top-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.project-card.dragging {
+  opacity: 0.72;
+  transform: scale(0.99);
+  cursor: grabbing;
+}
+
+.project-card.drag-over {
+  border-color: rgba(99, 102, 241, 0.34);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
 }
 
 .project-actions {

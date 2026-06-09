@@ -11,6 +11,12 @@ interface ProjectCardProps {
   interruptionCount: number;
   completedCount: number;
   hasRunningSession: boolean;
+  isDragging: boolean;
+  isDragOver: boolean;
+  onDragStart: (projectId: string) => void;
+  onDragOver: (projectId: string) => void;
+  onDrop: (projectId: string) => void;
+  onDragEnd: () => void;
   onEdit: (projectId: string) => void;
   onStart: (projectId: string) => void;
   onStop: () => void;
@@ -27,6 +33,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   interruptionCount,
   completedCount,
   hasRunningSession,
+  isDragging,
+  isDragOver,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
   onEdit,
   onStart,
   onStop,
@@ -38,7 +50,20 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
   const parts = rawTimerText.split(':');
 
   return (
-    <article className={`project-card${isActive ? ' active' : ''}`}>
+    <article
+      className={`project-card${isActive ? ' active' : ''}${isDragging ? ' dragging' : ''}${isDragOver ? ' drag-over' : ''}`}
+      draggable
+      onDragStart={() => onDragStart(project.id)}
+      onDragOver={(event) => {
+        event.preventDefault();
+        onDragOver(project.id);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDrop(project.id);
+      }}
+      onDragEnd={onDragEnd}
+    >
       <div className="project-accent" style={{ background: project.color }} />
       <div className="project-top">
         <div>
@@ -48,9 +73,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({
             <span>目标 {project.targetMinutes} 分钟</span>
           </div>
         </div>
-        <div className="status-chip project-status">
-          <span className={`status-dot${isActive ? ' live' : ''}`} />
-          {isActive ? '专注中' : '空闲'}
+        <div className="project-top-actions">
+          <div className="status-chip project-status">
+            <span className={`status-dot${isActive ? ' live' : ''}`} />
+            {isActive ? '专注中' : '空闲'}
+          </div>
         </div>
       </div>
 
