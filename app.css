@@ -474,7 +474,7 @@ button {
 .timer-group {
   display: inline-flex;
   min-width: 1.9ch;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 .timer-sign {
@@ -703,6 +703,12 @@ button {
 
 .session-delete:active {
   transform: scale(0.97);
+}
+
+.session-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
 }
 
 .empty {

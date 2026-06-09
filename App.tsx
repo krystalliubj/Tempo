@@ -1219,7 +1219,7 @@ const App: React.FC = () => {
 
           <SevenDayChart state={state} now={now} />
           <SessionsPanel
-            sessions={state.sessions.slice(0, 12)}
+            sessions={state.sessions}
             onDeleteSession={deleteSession}
           />
         </main>
